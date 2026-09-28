@@ -1,0 +1,395 @@
+====================================================================================================
+TRACK 1: HARDWARE & PHYSICAL INFRASTRUCTURE ECOSYSTEM
+====================================================================================================
+
+NVIDIA AI HARDWARE & INFRASTRUCTURE
+│
+├── 1. SILICON FABRICATION, PACKAGING & COMPUTE ACCELERATORS
+│   ├── Hopper Microarchitecture (GH100 / H100 / H200)
+│   │   ├── Lithography & Die: TSMC 4N (custom 5nm class), 814 mm² monolithic die, 80B transistors
+│   │   ├── SM (Streaming Multiprocessor) Architecture:
+│   │   │   ├── Full Die: 144 SMs across 8 GPCs | SXM5 Product SKU: 132 SMs enabled (16,896 CUDA cores)
+│   │   │   ├── Sub-Core Partition: 4 processing blocks per SM (Warp Scheduler, Dispatch, 64KB RegFile)
+│   │   │   ├── DPX Instructions: Hardware-accelerated dynamic programming (Smith-Waterman, Needleman-Wunsch)
+│   │   │   └── Thread Block Clusters: Spatial co-location across SMs via Distributed Shared Memory (DSMC)
+│   │   ├── Memory Accelerator & Caches:
+│   │   │   ├── TMA (Tensor Memory Accelerator): Hardware 1D–5D asynchronous tensor copies (bypasses RF)
+│   │   │   ├── Combined L1 Data Cache / Shared Memory: Configurable up to 228 KB per SM
+│   │   │   └── L2 Cache: 50 MB dedicated crossbar-connected cache with line-rate compression
+│   │   ├── 1st Gen Transformer Engine (TE):
+│   │   │   ├── Dynamic numerical format switching: FP8 E4M3 (forward pass) & FP8 E5M2 (backward pass)
+│   │   │   └── Native mixed-precision throughput: Up to 4,000 TFLOPS FP8 per GPU
+│   │   └── HBM Subsystem:
+│   │       ├── H100 SXM5: 80 GB HBM3 (5 active stacks @ 16 GB), 5120-bit bus width, 3.35 TB/s bandwidth
+│   │       └── H200 SXM5: 141 GB HBM3e (6 stacks @ 24 GB, 8-Hi), 5120-bit bus width, 4.8 TB/s bandwidth
+│   │
+│   ├── Blackwell Microarchitecture (GB100 / B100 / B200 / B300 "Blackwell Ultra")
+│   │   ├── Packaging & Interconnect:
+│   │   │   ├── Dual Reticle-Limit Dies: 2x TSMC 4NP dies, 208B transistors total (104B per die)
+│   │   │   ├── CoWoS-L (Chip-on-Wafer-on-Substrate with Local Silicon Interconnect Bridges)
+│   │   │   └── NV-HBI (High-Bandwidth Interface): 10 TB/s cross-die coherent bridge (single logical GPU)
+│   │   ├── Compute Units & SM Partitioning:
+│   │   │   ├── B200: 160 active SMs (80 SMs per die, 20,480 FP32 CUDA cores)
+│   │   │   ├── B300 (Blackwell Ultra): 160 SMs with enhanced SFU and dense FP4 matrix engines
+│   │   │   └── 5th Gen Tensor Cores: Microscopic scaling factors per tensor group, 2nd Gen TE
+│   │   ├── Micro-Precision Numeric Formats:
+│   │   │   ├── Native Precision: NVFP4 (E2M1), FP6 (E3M2/E2M3), FP8 (E4M3/E5M2), INT8, BF16, TF32, FP64
+│   │   │   ├── Dense Compute: 9,000 TFLOPS FP8 / 18,000 TFLOPS FP4 (B200 SXM)
+│   │   │   └── B300 Throughput: 15 PFLOPS dense FP4, 20 PFLOPS sparse FP4, 10.7 T-Exponentials/s SFU
+│   │   └── HBM Subsystem:
+│   │       ├── B200 SXM: 180 GB–192 GB HBM3e (8 stacks, 8-Hi), 8192-bit bus, 8.0 TB/s bandwidth
+│   │       └── B300 SXM: 288 GB HBM3e (8 stacks, 12-Hi), 16x 512-bit controllers, 8.0 TB/s bandwidth
+│   │
+│   └── Vera Rubin Microarchitecture (R100 / R200 / Vera Rubin NVL)
+│       ├── Silicon & Die Topology: TSMC 3nm (Extreme EUV), 336B transistors across dual dies
+│       ├── SM & Compute Density: 224 SMs (896 6th Gen Tensor Cores), 3rd Gen Transformer Engine
+│       │   ├── Throughput: Up to 50 PFLOPS NVFP4 agentic/inference compute, 35 PFLOPS training
+│       │   ├── Inline TMA Descriptor Updates: Dynamic pointer/stride override without host kernel recompiles
+│       │   └── Native Attention Hardware: Activation sparsity with adaptive compression and 2:4 structured MMA
+│       └── HBM Subsystem:
+│           ├── Memory: 288 GB HBM4 (12-Hi stacks), up to 22 TB/s peak bandwidth per GPU
+│           └── Architecture: 2048-bit base-die logic routing interface per HBM4 stack (2x width over HBM3e)
+│
+├── 2. HOST PROCESSORS & HETEROGENEOUS SUPERCHIPS
+│   ├── Grace CPU (Architecture & Microarchitecture)
+│   │   ├── Compute Subsystem: 72x ARM Neoverse V2 (Demeter) cores (ARMv9.0-A)
+│   │   │   ├── Issue Width: 8-wide superscalar out-of-order execution pipeline
+│   │   │   └── SIMD/Vector: 4x 128-bit SVE2 (Scalable Vector Extensions) per core, MatMul (I8MM/BF16)
+│   │   ├── Memory & Coherency:
+│   │   │   ├── Memory Interface: 32-channel LPDDR5X with ECC, up to 512 GB capacity, 546 GB/s bandwidth
+│   │   │   └── SCF (Scalable Coherency Fabric): Distributed cache architecture, 3.2 TB/s bisection bandwidth
+│   │   │       └── Cache Hierarchy: 64KB I/D L1, 1 MB private L2/core, 117 MB distributed shared L3
+│   │   └── Power Profile: Down to 1.3 pJ/bit memory interface; thermal envelope 250W–300W per CPU
+│   │
+│   ├── Vera CPU (Architecture & Microarchitecture)
+│   │   ├── Core Complex: 88 custom Armv9.2+ Olympus cores with Spatial Multithreading (176 threads)
+│   │   ├── Memory Subsystem: Up to 1.5 TB SOCAMM LPDDR5X, 1.2 TB/s bandwidth (2.4x higher over Grace)
+│   │   └── Hardware Security: Full rack-scale hardware confidential computing, secure attestation
+│   │
+│   └── Superchip Heterogeneous Topology
+│       ├── NVLink-C2C (Chip-to-Chip) Protocol:
+│       │   ├── Grace-to-Blackwell: 900 GB/s bidirectional coherent link (5x PCIe Gen 5 energy efficiency)
+│       │   ├── Vera-to-Rubin: 1,800 GB/s bidirectional coherent link (7x PCIe Gen 6 throughput)
+│       │   └── Coherency: Direct hardware unified memory space (GPU direct atomics into CPU LPDDR5X)
+│       ├── GH200: 1x Grace CPU + 1x Hopper GPU (480GB LPDDR5X + 96GB/144GB HBM3/HBM3e)
+│       ├── GB200: 1x Grace CPU + 2x Blackwell GPUs (SXM-integrated module, up to 2700W peak)
+│       └── Vera Rubin NVL: 1x Vera CPU + 2x Rubin GPUs (up to 576 GB HBM4 + 1.5 TB LPDDR5X)
+│
+├── 3. I/O SILICON, SUPER-NICS & DATA PROCESSING UNITS (DPUS)
+│   ├── BlueField-3 DPU
+│   │   ├── Embedded Processor: 16x ARM Cortex-A78 cores @ 2.0 GHz, up to 32 GB DDR5-5600 subsystem
+│   │   ├── Line-Rate Pipeline: Dual-port 400 Gb/s InfiniBand / Ethernet (PCIe Gen 5.0 x16 host)
+│   │   ├── Inline Crypto: 400 Gb/s IPSec, TLS 1.3, AES-XTS, SHA-2, MACsec, Hardware Root of Trust
+│   │   └── Hardware Accelerators: NVMe-oF target/initiator, virtio-blk/net emulation, Regex engine
+│   │
+│   ├── BlueField-4 DPU
+│   │   ├── Dual-Die Hybrid: 64-core Grace CPU compute die + ConnectX-9 scale-out networking die
+│   │   ├── Bandwidth: 800 Gb/s to 1.6 Tb/s line-rate data engine
+│   │   └── AI Storage Integration: Inference Context Memory Engine (offloads distributed KV-cache I/O)
+│   │
+│   └── SuperNIC Silicon (ConnectX Series)
+│       ├── ConnectX-7: Dual-port NDR 400 Gb/s / 400GbE, PCIe Gen 5 x16/2x16, 400M pkts/sec
+│       ├── ConnectX-8 SuperNIC: Dual-port 800 Gb/s (XDR / 800GbE), PCIe Gen 6 (PAM4, 128 GT/s)
+│       ├── ConnectX-9 SuperNIC: Single/Dual-port 1.6 Tb/s (PCIe Gen 6/7 PAM4 interface)
+│       └── Architecture Specifics:
+│           ├── Hardware RoCEv2 engines: Offloaded loss-free packet pacing, dynamic window sizing
+│           └── In-NIC Telemetry: Nanosecond-precision transit time stamping, fine-grained queue tracking
+│
+├── 4. SCALE-UP FABRICS (INTRA-NODE & INTRA-RACK NVLINK)
+│   ├── NVLink Signaling & PHY Layer
+│   │   ├── NVLink 4 (Hopper): 112G PAM4 signaling, 18 links/GPU, 50 GB/s per link (900 GB/s aggregate)
+│   │   ├── NVLink 5 (Blackwell): 224G PAM4 signaling, 18 ports/GPU, 100 GB/s per port (1.8 TB/s aggregate)
+│   │   └── NVLink 6 (Rubin): 224G+ optimized PAM4, 3.6 TB/s aggregate bidirectional bandwidth per GPU
+│   │       └── Protocol: Native counted-write synchronization for zero-copy distributed inference
+│   │
+│   ├── NVSwitch Silicon Generations
+│   │   ├── NVSwitch 3 (Hopper):
+│   │   │   ├── Radix: 64 ports @ 100 Gb/s SerDes (3.2 Tbps aggregate bandwidth)
+│   │   │   └── SHARP v3 Engine: Hardware in-network reduction for FP16 and FP32 collectives
+│   │   ├── NVSwitch 4 (Blackwell):
+│   │   │   ├── Radix: 144 ports @ 100 Gb/s SerDes (72 ports @ 200 Gb/s), 28.8 Tbps aggregate
+│   │   │   └── SHARP v4 Engine: Hardware in-network compute supporting FP8 and FP4 reduction
+│   │   └── NVSwitch 6 (Rubin Platform): 57.6 Tbps aggregate switching; in-network MoE dispatch
+│   │
+│   └── Mechanical & Interconnect Topologies
+│       ├── HGX 8-GPU Baseboard Topology: 8 GPUs fully-meshed through 4 on-board NVSwitch chips
+│       └── GB200 NVL72 Rack Scale-Up Fabric:
+│           ├── 72 GPUs connected in a single non-blocking fabric domain (130 TB/s bisection bandwidth)
+│           ├── Copper Spine Backplane: Blind-mate cartridge design with 5,000+ twinax copper cables
+│           ├── Switch Tray Architecture: 9 switch trays (dual NVSwitch 4 ASICs per tray = 18 switches)
+│           └── Optical-Free Reliability: Eliminates transceivers inside the rack, cutting power by 20 kW
+│
+├── 5. SCALE-OUT FABRICS (INTER-RACK & POD-LEVEL NETWORKING)
+│   ├── Quantum InfiniBand Ecosystem
+│   │   ├── Switch ASICs:
+│   │   │   ├── Quantum-2 (QM9700): 64x 400 Gb/s (NDR) ports, 51.2 Tbps capacity, 50ns port-to-port latency
+│   │   │   └── Quantum-X800 (Q3400): 144x 800 Gb/s (XDR) ports, 115.2 Tbps capacity, liquid-cooled
+│   │   ├── Congestion & Routing Mechanics:
+│   │   │   ├── Credit-Based Flow Control: Physical hop-by-hop buffer management (100% loss-free)
+│   │   │   ├── Hardware Adaptive Routing (AR): Fine-grained per-packet out-of-order dynamic routing
+│   │   │   └── SHARP (In-Network Computing): Offloads AllReduce/ReduceScatter to switches
+│   │   └── Topologies: 2-tier (up to 2,048 GPUs) and 3-tier (up to 10,000+ GPUs) Non-Blocking Fat-Tree
+│   │
+│   ├── AI Ethernet (Spectrum-X Platform)
+│   │   ├── Switch Silicon:
+│   │   │   ├── Spectrum-4 (SN5000): 51.2 Tbps, 64x 800GbE / 128x 400GbE, 160MB on-chip shared buffer
+│   │   │   ├── Spectrum-X800: 51.2 Tbps / 102.4 Tbps, 512 radix, advanced microburst absorbing buffers
+│   │   │   └── Spectrum-6 (Vera Rubin): 102.4 Tbps with Co-Packaged Optics (COUPE silicon photonics)
+│   │   ├── Enterprise RoCEv2 Enhancements:
+│   │   │   ├── Dynamic Packet Spraying: Per-packet load balancing across ECMP paths
+│   │   │   ├── SuperNIC Hardware Reorder Buffers: Flattens jitter and restores in-order packet arrival
+│   │   │   ├── Fast Congestion Notification: Microsecond RTT telemetry via enhanced ECN & DCQCN
+│   │   │   └── Deadlock Prevention: Watchdog timers eliminating PFC (Priority Flow Control) stalls
+│   │   └── Rail-Optimized Interconnect: 8 distinct network rails matching 8 GPUs per node
+│   │
+│   └── Direct Memory Protocols
+│       ├── GPUDirect RDMA: Bypasses host CPU, transferring data directly between NIC and HBM via PCIe/NVLink
+│       ├── GPUDirect Storage (GDS): Direct DMA pipeline between NVMe drives and GPU memory (cuFile APIs)
+│       └── GPUDirect P2P: Sub-microsecond cross-GPU DMA via local bus structures
+│
+├── 6. INTEGRATED SERVERS, SYSTEMS & RACK ENGINEERING
+│   ├── Modular Node Specifications
+│   │   ├── HGX H100 / HGX H200:
+│   │   │   ├── 8x SXM5 GPUs, 4x NVSwitches, 8x PCIe Gen 5 host connections, 10.2 kW peak power
+│   │   ├── HGX B200:
+│   │   │   ├── 8x B200 GPUs, 4x NVSwitch 4s, 8x OSFP cages, up to 14.4 kW power budget
+│   │   ├── DGX H100 / DGX B200 Turnkey Systems:
+│   │   │   ├── Dual Intel Xeon Platinum / AMD EPYC CPUs, 2TB DDR5, 8x ConnectX SuperNICs, 2x BlueField DPUs
+│   │   └── NVIDIA MGX Architecture:
+│   │       └── Standardized 1U, 2U, 4U multi-vendor modular chassis specs for x86 and Grace processors
+│   │
+│   └── Hyperscale NVL Systems (NVL36 & NVL72)
+│       ├── GB200 NVL72 Architecture:
+│       │   ├── Physical Dimensions: 48U/54U custom high-density rack, 4,000 lbs fully populated
+│       │   ├── Compute Density: 18x 2U compute trays (36 Grace CPUs + 72 Blackwell GPUs)
+│       │   ├── Switch Density: 9x 2U switch trays (18x NVSwitch 4 ASICs)
+│       │   └── Total Scale: 13.8 TB HBM3e, 1.44 EFLOPS FP4 inference, 130 TB/s scale-up fabric
+│       ├── Vera Rubin NVL72 Architecture:
+│       │   ├── 36 Vera CPUs + 72 Rubin GPUs, 20.7 TB HBM4, 260 TB/s NVLink 6 bisection
+│       │   └── Compute Output: 3.6 EFLOPS NVFP4 inference, 2.5 EFLOPS training
+│       └── Compute Tray Internals:
+│           ├── Dual GB200 modules, zero-insertion-force board blind mates
+│           └── Integrated power blades (54V DC input) and quick-disconnect coolant ports
+│
+└── 7. DATACENTER POWER, DELIVERY & THERMAL PLANTS
+    ├── High-Density Power Delivery (120 kW – 600 kW Per Rack)
+    │   ├── AC Facility Interface: 415V / 480V 3-phase AC feeds directly into rack power shelves
+    │   ├── Power Shelves: High-efficiency (>97.5%) N+N or N+2 redundant rectifier banks (AC to 48V–54V DC)
+    │   ├── Solid Copper Busbars: Centralized dual-pole 54V DC busbars spanning full vertical rack height
+    │   ├── Point-of-Load (PoL) Conversion: Direct-to-Pin VRMs converting 54V DC to <1.0V Vcore (thousands of Amps)
+    │   └── Transient Power Management:
+    │       ├── Fast current-slew mitigation: Nanosecond micro-throttling preventing DC rail voltage drop
+    │       └── Local energy buffering: Supercapacitor/battery pack shelves absorbing AI step loads
+    │
+    └── Thermal Plant & Liquid Cooling
+        ├── Direct-to-Chip (DLC) Cold Plates: Micro-channel skived copper cold plates covering GPU, CPU, NVSwitch
+        ├── Coolant Distribution Units (CDUs):
+        │   ├── In-Rack (150 kW–300 kW) or In-Row (1 MW–2 MW) liquid-to-liquid / liquid-to-air CDUs
+        │   └── Secondary Cooling Loop: Treated Propylene Glycol/Water (PG25) or pure deionized water
+        ├── Blind-Mate Quick Disconnects (QDs): Multi-port dripless valved connections at tray interfaces
+        └── Facility Loop Temperatures: ASHRAE Class W3/W4/W5 compliance (supports facility water up to 45°C)
+
+
+====================================================================================================
+TRACK 2: SOFTWARE, RUNTIMES & PLATFORM ECOSYSTEM
+====================================================================================================
+
+NVIDIA AI SOFTWARE & PLATFORM
+│
+├── 1. LOW-LEVEL KERNEL, SYSTEM DRIVERS & RUNTIMES
+│   ├── Linux Kernel Modules (NVIDIA Open GPU Kernel Drivers)
+│   │   ├── `nvidia.ko`: Core GPU initialization, base memory management, scheduling queues
+│   │   ├── `nvidia-uvm.ko`: Unified Virtual Memory engine, hardware page fault handling, migration
+│   │   ├── `nvidia-modeset.ko`: Display engine and low-level resource management
+│   │   └── `nvidia-peermem.ko`: Direct IB/RoCE verbs GPUDirect RDMA translation layer
+│   │
+│   ├── Driver Subsystems & Firmware Abstraction
+│   │   ├── GSP (GPU System Processor) Firmware: RISC-V offload engine executing power and init tasks
+│   │   ├── CUDA Driver API (`libcuda.so`): Low-level hardware execution, context control, module loading
+│   │   ├── CUDA Runtime API (`libcudart.so`): High-level memory alloc, stream synchronization, kernel launch
+│   │   └── Fabric Manager Daemon (`nvlink-fabric-manager`):
+│   │       ├── Automatically discovers NVSwitch topologies and programs physical routing tables
+│   │       └── Establishes non-blocking cross-tray routing; monitors link degradation and error states
+│   │
+│   └── Memory Management Engine
+│       ├── Unified Virtual Memory (UVM):
+│       │   ├── Page Fault Engine: Hardware servicing of page access faults across NVLink/PCIe
+│       │   └── Eviction/Prefetch: Background migration threads between host system RAM and GPU HBM
+│       ├── HMM (Heterogeneous Memory Management): Linux MMU mirror sharing CPU virtual address spaces
+│       └── ATS / PASID: PCIe Address Translation Services for coherent virtual addressing
+│
+├── 2. CUDA CORE TOOLCHAIN & ACCELERATION PRIMITIVES (CUDA-X)
+│   ├── Compiler & Toolchain
+│   │   ├── `nvcc` Compiler: Splits host code (C/C++) and device code; emits PTX and binary SASS
+│   │   ├── PTX (Parallel Thread Execution): Target-independent intermediate virtual ISA
+│   │   ├── SASS (Streaming Assembler): Native machine instruction set tailored per SM architecture
+│   │   └── Debugging & Profiling:
+│   │       ├── Nsight Systems (`nsys`): System-wide profiling across CPU, GPU, OS, and network
+│   │       ├── Nsight Compute (`ncu`): Deep kernel-level SM utilization, register pressure, stall analysis
+│   │       └── `compute-sanitizer`: Dynamic detection of memory access bugs, data races, unaligned accesses
+│   │
+│   ├── Dense Linear Algebra & GEMM Engines
+│   │   ├── cuBLAS / cuBLASLt:
+│   │   │   ├── Fused GEMM + Activation + Bias + Epilogues (GELU, ReLU, SwiGLU)
+│   │   │   └── Micro-precision dispatch: Native hardware matrix multiply routines (FP8, FP4, BF16)
+│   │   ├── CUTLASS (CUDA Templates for Linear Algebra Subroutines):
+│   │   │   ├── C++ template abstractions for high-performance GEMM down to warp and thread levels
+│   │   │   └── CUTLASS 3.x: Specialized TMA pipeline builders and warp-specialized persistent kernels
+│   │   └── cuTENSOR: High-performance tensor contractions, slicing, and multi-dimensional permutations
+│   │
+│   ├── Deep Learning & Attention Engines
+│   │   ├── cuDNN (CUDA Deep Neural Network):
+│   │   │   ├── Graph API: Abstract computation graphs enabling complex multi-layer fusion
+│   │   │   └── Fused Attention: Specialized execution paths for FlashAttention-2 and FlashAttention-3
+│   │   └── cuSPARSE: 2:4 structured sparsity matrix multiplication, sparse vector, and graph operators
+│   │
+│   └── Signal, Math & Data Pipelines
+│       ├── cuFFT & cuSOLVER: Large-scale Fast Fourier Transforms and LAPACK/Cholesky/QR solvers
+│       ├── CV-CUDA: GPU-accelerated image decoding, cropping, resizing, and computer vision pipelines
+│       └── DALI: Dynamic data loading, decoding, and augmentations bypassing CPU bottlenecks
+│
+├── 3. DISTRIBUTED INTERCONNECT RUNTIMES & COLLECTIVES
+│   ├── NCCL (NVIDIA Collective Communications Library)
+│   │   ├── Core Collective Primitives:
+│   │   │   ├── AllReduce, AllGather, ReduceScatter, Broadcast, Reduce, Send/Recv (P2P)
+│   │   ├── Dynamic Topology Auto-Discovery:
+│   │   │   ├── Enumerates PCIe trees, NUMA domains, NVLink meshes, NVSwitch fabrics, and NIC affinities
+│   │   ├── Execution Routing Engines:
+│   │   │   ├── Ring Algorithm: Divides payloads into chunks; maximizes bus utilization on rings
+│   │   │   ├── Tree Algorithm: Binomial tree construction minimizing latency for small payloads
+│   │   │   └── NVLS (NVLink SHARP): Hardware multicasting and in-fabric reduction on NVSwitch ASICs
+│   │   └── High-Performance Tuning Flags:
+│   │       ├── `NCCL_BUFFSIZE`: Intermediate pipeline buffer sizing (e.g., `4194304` or `8388608` bytes)
+│   │       ├── `NCCL_CROSS_NIC`: `0` (Strict NUMA/NIC locality) | `1` (Allows balancing across all NICs)
+│   │       ├── `NCCL_NET_GDR_LEVEL`: GPUDirect RDMA control (`SYS`, `NODE`, `PHB`, `PIX`, `LOC`)
+│   │       ├── `NCCL_ALGO`: Forces routing selection (`Tree`, `Ring`, `NVLS`, `CollNet`)
+│   │       ├── `NCCL_NVLS_ENABLE`: `1` (Forces hardware NVSwitch SHARP reduction offload)
+│   │       └── `NCCL_P2P_DISABLE`: `1` (Disables intra-node P2P; forces staging through system memory)
+│   │
+│   ├── NVSHMEM: OpenSHMEM-standard partitioned global address space (PGAS) for multi-GPU clusters
+│   └── UCX (Unified Communication X): Low-overhead communications framework unifying verbs and shared memory
+│
+├── 4. INFERENCE ENGINES, OPTIMIZERS & COMPILERS
+│   ├── TensorRT Platform
+│   │   ├── Graph Fusion: Horizontal and vertical kernel fusion; elimination of identity and reshape ops
+│   │   ├── Auto-Tuning Engine: Hardware-specific kernel profiling selecting best GEMM configurations
+│   │   └── Memory Optimization: Lifetime tensor analysis minimizing peak GPU scratchpad allocation
+│   │
+│   ├── TensorRT-LLM Microarchitecture
+│   │   ├── Continuous / In-Flight Batching: Iteration-level scheduling avoiding bubble latency
+│   │   ├── PagedAttention & Chunked Context:
+│   │   │   ├── Non-contiguous virtual memory allocation for Key-Value cache
+│   │   │   └── Dynamic KV-cache paging, KV-cache sharing, prefix caching, and cross-GPU offload
+│   │   ├── Advanced Quantization Framework:
+│   │   │   ├── FP8 Weight + FP8 Activation (W8A8), SmoothQuant, AWQ (Activation-aware Weight)
+│   │   │   ├── NVFP4 (W4A4): Micro-block scale-factor quantization designed for Blackwell/Rubin engines
+│   │   │   └── Weight-Only Quantization: W4A16 and W8A16 for bandwidth-limited decoding phases
+│   │   └── Speculative Decoding & Advanced Decoders:
+│   │       ├── Medusa multi-head draft token prediction without separate small draft models
+│   │       └── Eagle speculative sampling, lookahead decoding, and beam search acceleration
+│   │
+│   └── RAPIDS Acceleration Suite
+│       ├── cuDF: GPU DataFrame manipulation accelerating pandas and Polars via GPU columnar memory (Apache Arrow)
+│       ├── cuML: GPU-accelerated Scikit-Learn algorithms (Random Forests, k-Means, t-SNE, XGBoost)
+│       ├── cuGraph: Extreme-scale graph analytics (PageRank, Louvain community detection, BFS/SSSP)
+│       └── Spark RAPIDS: Drop-in hardware acceleration plugin for Apache Spark SQL and Catalyst optimizer
+│
+├── 5. DISTRIBUTED TRAINING, ALIGNMENT & SERVING PLATFORMS
+│   ├── Megatron-LM / Megatron-Core
+│   │   ├── 3D Parallelism Execution:
+│   │   │   ├── Tensor Parallelism (TP): Intra-node splitting of weight matrices (Column/Row Parallel)
+│   │   │   ├── Pipeline Parallelism (PP): Inter-node stage splitting (1F1B scheduling, interleaved 1F1B)
+│   │   │   └── Data Parallelism (DP): Distributed Optimizer, ZeRO Stage-1, 2, and 3 state sharding
+│   │   ├── Advanced Parallelisms:
+│   │   │   ├── Context / Sequence Parallelism (CP/SP): Ring Attention sharding input across GPUs
+│   │   │   └── Expert Parallelism (EP): Mixture-of-Experts routing dispatching tokens to expert nodes
+│   │   └── Activation Checkpointing: Selective activation recomputation minimizing activation memory
+│   │
+│   ├── NeMo End-to-End Enterprise Framework
+│   │   ├── Data Engine: NeMo Curator (scalable multi-node text extraction, deduplication, toxicity filtering)
+│   │   ├── Training Engine: Distributed pre-training, SFT, and PEFT (LoRA, QLoRA, DoRA, P-Tuning)
+│   │   ├── Alignment Engine: RLHF, DPO (Direct Preference Optimization), SteerLM, and KTO pipelines
+│   │   └── Trust & Safety: NeMo Guardrails (programmable topical, execution, safety, and retrieval rails)
+│   │
+│   ├── Serving Microservices & Workflows
+│   │   ├── Triton Inference Server:
+│   │   │   ├── Multi-Backend Execution: TensorRT-LLM, PyTorch, ONNX, OpenVINO, Python Backends
+│   │   │   ├── Dynamic Batching: Aggregates asynchronous requests across concurrent client threads
+│   │   │   └── BLS (Business Logic Scripting): Multi-model orchestration, ensembles, and pre/post chains
+│   │   └── NVIDIA NIM (Inference Microservices):
+│   │       ├── Pre-packaged, production-grade OCI container images with optimized hardware runtimes
+│   │       └── Drop-in standard OpenAI-compliant REST/gRPC APIs, token metrics, dynamic autoscaling
+│   │
+│   └── Industrial & Domain-Specific AI Platforms
+│       ├── Omniverse Core: OpenUSD (Universal Scene Description), RTX real-time path tracer, PhysX 5
+│       ├── Isaac Robotics Platform: Isaac Sim, Isaac Lab (RL locomotion), Isaac ROS/Perceptor (vSLAM)
+│       ├── Clara & BioNeMo: Biomolecular generative models, AlphaFold2, ESMFold, MONAI medical imaging
+│       └── DRIVE Platform: DRIVE OS, DRIVE AV, DriveWorks SDK, and DRIVE Thor safety kernels
+│
+├── 6. DPU PROGRAMMING & SYSTEM EMBEDDED SOFTWARE (DOCA)
+│   ├── DOCA Core SDK (Data Center on a Chip Architecture)
+│   │   ├── DOCA Flow: Hardware match-action pipeline compiler (offloads OVS, CT, and VXLAN routing)
+│   │   ├── DOCA Telemetry: Line-rate NetFlow, IPFIX, sFlow, and WJH (What Just Happened) telemetry collection
+│   │   ├── DOCA Storage & SNAP: Virtual NVMe-oF target emulator exposing host virtio-blk interfaces
+│   │   ├── DOCA Firefly: High-precision IEEE 1588 PTP hardware clock synchronization (<10ns precision)
+│   │   └── DOCA GPUNetIO: Inline communication path bridging DPU network directly into GPU memory
+│   └── Operations & Utilities: `bfb-install` (DPU boot file image deployment), `mlxprivhost` (PCIe security lock)
+│
+└── 7. CLUSTER ORCHESTRATION, SRE, TELEMETRY & DIAGNOSTICS
+    ├── GPU Partitioning & Virtualization
+    │   ├── MIG (Multi-Instance GPU):
+    │   │   ├── Hardware partitioning up to 7 distinct instances per GPU (e.g., 1g.10gb, 2g.20gb, 3g.40gb)
+    │   │   └── Independent hardware resources: Isolated SMs, memory slices, crossbar paths, L2 caches
+    │   ├── vGPU (Virtual GPU): Multi-tenant enterprise virtualization across VMware ESXi, KVM, Red Hat
+    │   └── Run:ai: AI workload scheduler featuring dynamic GPU fractions, gang-scheduling, and elastic pools
+    │
+    ├── Cluster Infrastructure & Provisioning
+    │   ├── NVIDIA GPU Operator: Kubernetes operator automating driver injection, container runtime, MIG, DCGM
+    │   ├── NVIDIA Network Operator: Automates MOFED drivers, RDMA, SR-IOV, and Multus secondary network setups
+    │   └── Base Command Manager (BCM): Bare-metal provisioning, OS imaging, Slurm/Kubernetes cluster life-cycle
+    │
+    ├── Host & GPU Telemetry Infrastructure
+    │   ├── System Management Interface (`nvidia-smi`):
+    │   │   ├── Telemetry: `nvidia-smi -q -x` (complete XML machine dump), `--query-gpu=`
+    │   │   └── Power/Clock Control: `nvidia-smi -pl <watts>`, `nvidia-smi -lgc <freq>`, `nvidia-smi -pm 1`
+    │   ├── NVML (NVIDIA Management Library): C-API and Python bindings for low-overhead telemetry ingestion
+    │   └── DCGM (Data Center GPU Manager):
+    │       ├── Architecture: Background system daemon `nv-hostengine` communicating with `dcgmi` client
+    │       ├── Profiling Metrics: SM activity, Tensor utilization, HBM bandwidth, NVLink RX/TX throughput
+    │       └── DCGM-Exporter: High-frequency Prometheus metrics exporter with pre-built Grafana dashboards
+    │
+    ├── Hardware Diagnostics, Validation & Reliability
+    │   ├── NVVS (NVIDIA Validation Suite):
+    │   │   ├── Diagnostic Levels:
+    │   │   │   ├── Level 1: Quick system deployment verification (sanity & software checks)
+    │   │   │   ├── Level 2: Medium stress and integration checks
+    │   │   │   ├── Level 3: Hardware stress testing (HGX baseboard, memory interfaces)
+    │   │   │   └── Level 4: Extended burn-in diagnostics (HBM retention, high-load thermal stress)
+    │   │   └── DCGM Diagnostics: `dcgmi diag -r 1|2|3|4`
+    │   ├── Kernel Error Tracking (XID Analysis):
+    │   │   ├── XID 31: Memory page fault occurring on GPU
+    │   │   ├── XID 43: GPU stopped responding to host commands
+    │   │   ├── XID 45: Preemptive event or bus engine error
+    │   │   ├── XID 62: Internal micro-code parity error / uncorrectable SRAM error
+    │   │   ├── XID 79: GPU has fallen off the bus (typically severe PCIe drop, thermal/power trip)
+    │   │   └── XID 92: High-speed NVLink hardware link failure / SerDes lock loss
+    │   └── Silent Data Corruption (SDC) Tracking: Memory scrubbing daemons and double-bit ECC tracking
+    │
+    └── Network & Fabric Diagnostics Tooling
+        ├── InfiniBand Fabric Diagnostics:
+        │   ├── `ibstat` / `ibstatus`: Queries local HCA link states, active physical link speeds (NDR/XDR)
+        │   ├── `ibdiagnet`: Fabric-wide topology scan, routing loops, packet drops, credit stalls
+        │   ├── `perfquery`: Read/clear hardware counters (`PortXmitData`, `PortRcvErrors`, `PortXmitWait`)
+        │   ├── `iblinkinfo`: Complete fabric-wide port speed and status mapping
+        │   ├── `ibtracert`: Unicast path trace between source and destination LID/GUIDs
+        │   └── NVIDIA UFM (Unified Fabric Manager):
+        │       ├── UFM Enterprise: Centralized subnet management (OpenSM integration) and topology maps
+        │       ├── UFM Telemetry: Real-time network telemetry streaming (link flaps, packet drops)
+        │       └── UFM Cyber-AI: Predictive failure analysis for optical transceivers and cables
+        ├── AI Ethernet / RoCE Tooling:
+        │   ├── `ethtool`: SerDes line-speed verification, FEC (Forward Error Correction) statistics
+        │   ├── MST (Mellanox Software Tools): `mstflint` (firmware burning and verification)
+        │   ├── `mlnx_qos`: PFC (Priority Flow Control) and ECN (DSCP-to-Queue) mapping inspect
+        │   └── `mlnx-tools`: Link diagnostic scripts and SerDes eye-diagram qualification
+        └── Distributed Fabric Benchmarks:
+            └── `nccl-tests`: Validation suite (`all_reduce_perf`, `all_gather_perf`, `sendrecv_perf`)
