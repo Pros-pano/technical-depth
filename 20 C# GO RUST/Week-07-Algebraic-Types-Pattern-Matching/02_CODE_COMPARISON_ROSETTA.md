@@ -1,185 +1,290 @@
-# Week 07: Code Comparison - Order State Machine & Command Parser
+# Rosetta Stone: Order Lifecycle State Machine
 
-## The Scenario
-We are building a highly robust e-commerce order processing pipeline. An order transitions through strict states. We also need a CLI command parser to trigger these transitions.
+This exercise demonstrates how to build an exhaustive, strictly-enforced state machine in C#, Go, and Rust. We are modeling an Order Lifecycle:
+`Created -> PaymentPending -> Paid(Receipt) -> Shipped(Carrier, Tracking) -> Delivered(Signature) | Failed(Reason)`
 
-## 1. C# Implementation: The Struggle with Nulls
+Notice how Rust enforces data integrity at compile time, while C# and Go require runtime validation and structural compromises.
 
-In C#, we struggle with representing disjoint state natively without class explosions. We often rely on `Nullable<T>`.
+---
 
-### Code
-```csharp
-using System;
+## 1. Rust Implementation (The Gold Standard)
 
-// Using C# 9+ records and nullable reference types
-public enum Status { Created, PaymentPending, Paid, Shipped, Delivered, Failed }
+Rust uses Algebraic Data Types (Enums) to ensure that states and their data are physically inseparable.
 
-public record PaymentDetails(decimal Amount, string Method);
-
-public class Order
-{
-    public Status CurrentStatus { get; private set; }
-    
-    // BAD: These fields represent state that shouldn't always exist!
-    public PaymentDetails? Payment { get; private set; }
-    public string? TrackingNumber { get; private set; }
-    public string? Carrier { get; private set; }
-    public string? FailureReason { get; private set; }
-
-    public Order() { CurrentStatus = Status.Created; }
-
-    public void MarkPaid(PaymentDetails payment) {
-        if (CurrentStatus != Status.Created) throw new InvalidOperationException();
-        CurrentStatus = Status.Paid;
-        Payment = payment;
-    }
-
-    public void MarkShipped(string tracking, string carrier) {
-        // Runtime check required to prevent invalid transitions
-        if (CurrentStatus != Status.Paid) throw new InvalidOperationException("Must be paid to ship.");
-        CurrentStatus = Status.Shipped;
-        TrackingNumber = tracking;
-        Carrier = carrier;
-    }
-}
+**`Cargo.toml`**
+```toml
+[package]
+name = "order_state_machine"
+version = "0.1.0"
+edition = "2021"
 ```
 
-## 2. Go Implementation: Interface Polymorphism
-
-Go uses interfaces to simulate sum types. State transitions return new state objects.
-
-### Code
-```go
-package main
-
-import "fmt"
-
-type OrderState interface {
-    stateName() string
-}
-
-type Created struct{}
-func (c Created) stateName() string { return "Created" }
-
-type Paid struct { Amount float64; Method string }
-func (p Paid) stateName() string { return "Paid" }
-
-type Shipped struct { TrackingNumber string; Carrier string }
-func (s Shipped) stateName() string { return "Shipped" }
-
-// Transitions are functions that take an interface and return an interface
-func ShipOrder(state OrderState, tracking string, carrier string) (OrderState, error) {
-    // Type assertion replaces static checking
-    if _, ok := state.(Paid); !ok {
-        return state, fmt.Errorf("invalid transition: order not paid")
-    }
-    return Shipped{TrackingNumber: tracking, Carrier: carrier}, nil
-}
-
-func processOrder(state OrderState) {
-    switch v := state.(type) {
-    case Created:
-        fmt.Println("New order")
-    case Paid:
-        fmt.Printf("Paid $%.2f via %s\n", v.Amount, v.Method)
-    case Shipped:
-        fmt.Printf("Shipped via %s: %s\n", v.Carrier, v.TrackingNumber)
-    default:
-        // compiler won't save us if we forget a state!
-        panic("Unhandled state") 
-    }
-}
-```
-
-## 3. Rust Implementation: True Algebraic Data Types
-
-Rust perfectly encapsulates the domain logic. Transitions take ownership of the old state and return the new state.
-
-### Code
+**`src/main.rs`**
 ```rust
-#[derive(Debug)]
-pub struct PaymentDetails {
-    pub amount: f64,
-    pub method: String,
-}
-
+// 1. The Sum Type Enum
+// Notice how each state encapsulates exactly and ONLY the data it needs.
 #[derive(Debug)]
 pub enum OrderState {
     Created,
     PaymentPending,
-    Paid(PaymentDetails),
-    Shipped { tracking_number: String, carrier: String },
-    Delivered(String), // signature
-    Failed(String),    // reason
+    Paid { receipt_id: String },
+    Shipped { carrier: String, tracking_id: String },
+    Delivered { signature: String },
+    Failed { reason: String },
 }
 
-impl OrderState {
-    // State transition method consumes `self` (takes ownership)
-    // You cannot use the old state after transitioning!
-    pub fn mark_paid(self, details: PaymentDetails) -> Result<Self, String> {
-        match self {
-            OrderState::Created | OrderState::PaymentPending => Ok(OrderState::Paid(details)),
-            _ => Err("Invalid transition to Paid".to_string()),
-        }
+// 2. The Order Struct holding the state
+pub struct Order {
+    pub id: u64,
+    pub state: OrderState,
+}
+
+impl Order {
+    pub fn new(id: u64) -> Self {
+        Order { id, state: OrderState::Created }
     }
 
-    pub fn mark_shipped(self, tracking_number: String, carrier: String) -> Result<Self, String> {
-        match self {
-            OrderState::Paid(_) => Ok(OrderState::Shipped { tracking_number, carrier }),
-            _ => Err("Must be Paid to ship".to_string()),
+    // 3. State Transition logic using exhaustive pattern matching
+    pub fn process(&mut self) {
+        // The compiler FORCES us to handle every variant of OrderState.
+        // If we forget `Delivered`, this will not compile.
+        match &self.state {
+            OrderState::Created => {
+                println!("Order {} created. Moving to payment...", self.id);
+                self.state = OrderState::PaymentPending;
+            }
+            OrderState::PaymentPending => {
+                // Simulating a successful payment
+                self.state = OrderState::Paid { 
+                    receipt_id: format!("REC-{}", self.id) 
+                };
+            }
+            OrderState::Paid { receipt_id } => {
+                // The receipt_id is destructured and guaranteed to exist.
+                println!("Order {} paid with receipt {}. Shipping...", self.id, receipt_id);
+                self.state = OrderState::Shipped { 
+                    carrier: "FedEx".to_string(), 
+                    tracking_id: "TRK-999".to_string() 
+                };
+            }
+            OrderState::Shipped { carrier, tracking_id } => {
+                println!("Order {} is on the way via {} ({})", self.id, carrier, tracking_id);
+                self.state = OrderState::Delivered { 
+                    signature: "John Doe".to_string() 
+                };
+            }
+            OrderState::Delivered { signature } => {
+                println!("Order {} complete. Signed by {}.", self.id, signature);
+            }
+            OrderState::Failed { reason } => {
+                println!("Order {} failed permanently: {}", self.id, reason);
+            }
         }
     }
 }
 
-pub fn process_order(state: &OrderState) {
-    // Exhaustive matching. Compiler enforces all arms exist.
-    match state {
-        OrderState::Created => println!("Order created."),
-        OrderState::PaymentPending => println!("Waiting for payment."),
-        OrderState::Paid(details) => println!("Paid ${} via {}", details.amount, details.method),
-        OrderState::Shipped { tracking_number, carrier } => {
-            println!("Shipped via {}: {}", carrier, tracking_number);
-        }
-        OrderState::Delivered(sig) => println!("Signed by {}", sig),
-        OrderState::Failed(reason) => println!("Failed: {}", reason),
-    }
-}
-
-// ---------------------------------------------------------
-// CLI COMMAND PARSER
-// ---------------------------------------------------------
-#[derive(Debug)]
-pub enum Command {
-    CreateOrder { customer_id: u32, items: Vec<String> },
-    CancelOrder { order_id: u32, reason: String },
-    ListOrders { status: Option<String>, page: u32 },
-}
-
-// Simulated parser extracting strongly typed enums from text
-fn parse_command(input: &str) -> Result<Command, String> {
-    let parts: Vec<&str> = input.split_whitespace().collect();
-    match parts.as_slice() {
-        ["create", "order", cid, items] => {
-            Ok(Command::CreateOrder {
-                customer_id: cid.parse().unwrap_or(0),
-                items: items.split(',').map(String::from).collect(),
-            })
-        }
-        ["cancel", "order", oid, reason] => {
-            Ok(Command::CancelOrder {
-                order_id: oid.parse().unwrap_or(0),
-                reason: reason.to_string(),
-            })
-        }
-        ["list", "orders", "--page", page] => {
-            Ok(Command::ListOrders { status: None, page: page.parse().unwrap_or(1) })
-        }
-        _ => Err("Unknown command".to_string())
+fn main() {
+    let mut order = Order::new(101);
+    
+    // Drive the state machine to completion
+    for _ in 0..5 {
+        order.process();
     }
 }
 ```
 
+---
+
+## 2. Go Implementation (The Workaround)
+
+Go lacks Enums and Sum Types. We must use a struct (Product Type) with pointers to simulate optional state data, or use an interface with type switching. Here, we show the interface/type-switch pattern, which is the closest Go has to Sum Types, though it lacks exhaustiveness checking.
+
+**`main.go`**
+```go
+package main
+
+import (
+	"fmt"
+)
+
+// 1. Define the "Enum" Interface
+// Any struct implementing this empty method satisfies the state.
+type OrderState interface {
+	isOrderState()
+}
+
+// 2. Define the Variants (Structs)
+type Created struct{}
+func (Created) isOrderState() {}
+
+type PaymentPending struct{}
+func (PaymentPending) isOrderState() {}
+
+type Paid struct {
+	ReceiptID string
+}
+func (Paid) isOrderState() {}
+
+type Shipped struct {
+	Carrier    string
+	TrackingID string
+}
+func (Shipped) isOrderState() {}
+
+type Delivered struct {
+	Signature string
+}
+func (Delivered) isOrderState() {}
+
+type Failed struct {
+	Reason string
+}
+func (Failed) isOrderState() {}
+
+// 3. The Order Struct
+type Order struct {
+	ID    uint64
+	State OrderState // Holds a fat pointer to one of the above structs
+}
+
+// 4. State Transition Logic
+func (o *Order) Process() {
+	// Type Switch
+	// WARNING: The Go compiler does NOT guarantee exhaustiveness here!
+	// If you forget 'Delivered', the compiler won't care, leading to runtime bugs.
+	switch s := o.State.(type) {
+	case Created:
+		fmt.Printf("Order %d created. Moving to payment...\n", o.ID)
+		o.State = PaymentPending{}
+	case PaymentPending:
+		o.State = Paid{ReceiptID: fmt.Sprintf("REC-%d", o.ID)}
+	case Paid:
+		fmt.Printf("Order %d paid with receipt %s. Shipping...\n", o.ID, s.ReceiptID)
+		o.State = Shipped{Carrier: "FedEx", TrackingID: "TRK-999"}
+	case Shipped:
+		fmt.Printf("Order %d is on the way via %s (%s)\n", o.ID, s.Carrier, s.TrackingID)
+		o.State = Delivered{Signature: "John Doe"}
+	case Delivered:
+		fmt.Printf("Order %d complete. Signed by %s.\n", o.ID, s.Signature)
+	case Failed:
+		fmt.Printf("Order %d failed permanently: %s\n", o.ID, s.Reason)
+	default:
+		// Required defensive programming because Go lacks exhaustive checks
+		panic("Unknown state encountered!") 
+	}
+}
+
+func main() {
+	order := &Order{ID: 101, State: Created{}}
+
+	for i := 0; i < 5; i++ {
+		order.Process()
+	}
+}
+```
+
+---
+
+## 3. C# Implementation (Records and Switch Expressions)
+
+Modern C# (C# 9+) uses abstract records to simulate Sum Types and switch expressions to enforce exhaustiveness. This is a vast improvement over legacy C# classes, though it still relies heavily on the CLR heap allocation.
+
+**`Program.cs`**
+```csharp
+using System;
+
+namespace OrderStateMachine
+{
+    // 1. The Abstract Base Record (simulating a Sum Type base)
+    public abstract record OrderState;
+
+    // 2. The Variants
+    public record Created : OrderState;
+    public record PaymentPending : OrderState;
+    public record Paid(string ReceiptId) : OrderState;
+    public record Shipped(string Carrier, string TrackingId) : OrderState;
+    public record Delivered(string Signature) : OrderState;
+    public record Failed(string Reason) : OrderState;
+
+    // 3. The Order Struct
+    public class Order
+    {
+        public ulong Id { get; }
+        public OrderState State { get; private set; }
+
+        public Order(ulong id)
+        {
+            Id = id;
+            State = new Created();
+        }
+
+        // 4. State Transition Logic
+        public void Process()
+        {
+            // C# 8+ Switch Expression with Pattern Matching
+            // The compiler CAN warn about non-exhaustiveness here!
+            State = State switch
+            {
+                Created => MoveToPayment(Id),
+                PaymentPending => new Paid($"REC-{Id}"),
+                Paid p => ShipOrder(Id, p.ReceiptId),
+                Shipped s => DeliverOrder(Id, s.Carrier, s.TrackingId),
+                Delivered d => Complete(Id, d.Signature),
+                Failed f => Fail(Id, f.Reason),
+                _ => throw new InvalidOperationException("Unknown state") // Still requires a fallback
+            };
+        }
+
+        private static OrderState MoveToPayment(ulong id)
+        {
+            Console.WriteLine($"Order {id} created. Moving to payment...");
+            return new PaymentPending();
+        }
+
+        private static OrderState ShipOrder(ulong id, string receiptId)
+        {
+            Console.WriteLine($"Order {id} paid with receipt {receiptId}. Shipping...");
+            return new Shipped("FedEx", "TRK-999");
+        }
+
+        private static OrderState DeliverOrder(ulong id, string carrier, string tracking)
+        {
+            Console.WriteLine($"Order {id} is on the way via {carrier} ({tracking})");
+            return new Delivered("John Doe");
+        }
+
+        private static OrderState Complete(ulong id, string signature)
+        {
+            Console.WriteLine($"Order {id} complete. Signed by {signature}.");
+            return new Delivered(signature); // Terminal state loop
+        }
+
+        private static OrderState Fail(ulong id, string reason)
+        {
+            Console.WriteLine($"Order {id} failed: {reason}");
+            return new Failed(reason);
+        }
+    }
+
+    class Program
+    {
+        static void Main(string[] args)
+        {
+            var order = new Order(101);
+
+            for (int i = 0; i < 5; i++)
+            {
+                order.Process();
+            }
+        }
+    }
+}
+```
+
+---
+
 ## Critical Observations for C# Developers
-1. **Memory Representation**: In C#, the `Order` class allocates space for all references (tracking, carrier, etc.) regardless of state. In Rust, the `OrderState` enum takes exactly as much memory as its largest variant plus a discriminator tag.
-2. **Consuming State Transitions**: Notice how `mark_shipped(self, ...)` in Rust does not take `&mut self`. It takes `self` by value, transferring ownership. This means once an order is shipped, the compiler prevents you from ever accessing the `OrderState::Paid` version of that order again. This completely eliminates a massive category of invalid state bugs.
-3. **No Hidden Nulls**: The Rust `Shipped` state physically contains the tracking string. You cannot have a `Shipped` state without a tracking number, completely eliminating `NullReferenceException`.
+
+1.  **Memory Representation:** In Rust, `OrderState` is an inline tagged union. The entire struct lives contiguously on the stack without pointers (unless Boxed). In C#, every single state transition (`new Paid(...)`, `new Shipped(...)`) allocates a brand new object on the managed heap, triggering garbage collection pressure.
+2.  **Exhaustiveness guarantees:** Rust's `match` will flat-out refuse to compile if a state is missing. C#'s `switch` expression will issue a compiler *warning* (CS8509) if a state is missing, but it will still compile and throw a `SwitchExpressionException` at runtime. Go offers absolutely zero help; you are completely on your own.
+3.  **Encapsulation of State Data:** Note how in all three implementations, we successfully avoided the "Nullable Trap." A developer physically cannot access `ReceiptId` unless the current state is explicitly matched as `Paid`. This is the power of type-driven design.

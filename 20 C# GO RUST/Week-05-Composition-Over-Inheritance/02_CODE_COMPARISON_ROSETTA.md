@@ -1,232 +1,302 @@
-# Week 05: Code Comparison Rosetta — E-Commerce Domain
+# Week 05 Code Comparison: E-Commerce Domain Model
 
-This code comparison models a real-world e-commerce domain (`Order`, `Customer`, `DiscountPolicy`, `ShippingProvider`). It explicitly demonstrates the transition from brittle C# inheritance (where rules are hardcoded into class hierarchies) to Go/Rust composition (where behaviors are plugged in).
+In this exercise, we will model an E-Commerce system dealing with Orders, Discounts, and Shipping. 
 
-## C# Implementation: Brittle Inheritance
+We will start with a classic C# object-oriented inheritance tree, observe how brittle it becomes when new requirements arrive, and then refactor it using Go's Struct Embedding and Rust's Trait Composition.
 
-In traditional C# OOP, we often build a taxonomy. Notice how quickly this becomes inflexible.
+---
 
-### Project Setup
-```bash
-dotnet new console -n CSharpECommerce
-cd CSharpECommerce
+## 1. C# Implementation: The Brittle Inheritance Hierarchy
+
+In traditional C#, we often try to solve varying behavior by subclassing. 
+
+**Scenario:** We have a Base Order. Then we need Discounted Orders. Then we need International Orders. Then we need International Discounted Orders...
+
+**Project Setup (`Ecommerce.csproj`)**
+```xml
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+</Project>
 ```
 
-### Code (`Program.cs`)
+**Code (`Program.cs`)**
 ```csharp
 using System;
 
-// 1. The Brittle Base Class
-public abstract class Order {
-    public decimal TotalAmount { get; protected set; }
-    public string CustomerName { get; set; }
-
-    public Order(string customerName, decimal amount) {
-        CustomerName = customerName;
-        TotalAmount = amount;
+// 1. The Base Class
+public abstract class Order
+{
+    public decimal BasePrice { get; set; }
+    
+    public Order(decimal basePrice)
+    {
+        BasePrice = basePrice;
     }
 
-    // Virtual methods invite overriding, leading to coupling.
-    public virtual void ApplyDiscount() {
-        // Base order has no discount
+    // Virtual dispatch allows subclasses to change behavior
+    public virtual decimal CalculateTotal()
+    {
+        return BasePrice;
     }
 
-    public virtual decimal CalculateShipping() {
-        return 10.0m; // Default standard shipping
-    }
-
-    public void Process() {
-        ApplyDiscount();
-        decimal shipping = CalculateShipping();
-        Console.WriteLine($"Order for {CustomerName} processed. Total: {TotalAmount}, Shipping: {shipping}");
+    public virtual string GetShippingLabel()
+    {
+        return "Standard Domestic Shipping";
     }
 }
 
-// 2. The derived classes
-public class VipOrder : Order {
-    public VipOrder(string customerName, decimal amount) : base(customerName, amount) {}
+// 2. The Derived Classes (Combinatorial Explosion begins)
+public class DiscountedOrder : Order
+{
+    public decimal DiscountAmount { get; set; }
 
-    public override void ApplyDiscount() {
-        TotalAmount *= 0.9m; // 10% discount
+    public DiscountedOrder(decimal basePrice, decimal discount) : base(basePrice)
+    {
+        DiscountAmount = discount;
+    }
+
+    public override decimal CalculateTotal()
+    {
+        // Tight coupling to base class state
+        return base.CalculateTotal() - DiscountAmount;
     }
 }
 
-public class InternationalVipOrder : VipOrder {
-    public InternationalVipOrder(string customerName, decimal amount) : base(customerName, amount) {}
+public class InternationalOrder : Order
+{
+    public decimal ImportTax { get; set; }
 
-    public override decimal CalculateShipping() {
-        return 50.0m; // Expensive international shipping
+    public InternationalOrder(decimal basePrice, decimal tax) : base(basePrice)
+    {
+        ImportTax = tax;
+    }
+
+    public override decimal CalculateTotal()
+    {
+        return base.CalculateTotal() + ImportTax;
+    }
+
+    public override string GetShippingLabel()
+    {
+        return "Customs Required - International Shipping";
     }
 }
 
-// THE PROBLEM: 
-// What if we want a HolidayOrder that is NOT VIP? We duplicate the discount logic.
-// What if we want an InternationalOrder that is NOT VIP? We duplicate the shipping logic.
-// The hierarchy forces us to couple discounts and shipping methods into fixed paths.
+// THE PROBLEM: What if we need an International Discounted Order?
+// C# does not support multiple inheritance. 
+// We are forced into deep nesting or duplicating logic.
+public class InternationalDiscountedOrder : InternationalOrder
+{
+    public decimal DiscountAmount { get; set; }
 
-public class Program {
-    public static void Main() {
-        var order = new InternationalVipOrder("Alice", 100.0m);
-        order.Process();
+    public InternationalDiscountedOrder(decimal basePrice, decimal tax, decimal discount) 
+        : base(basePrice, tax)
+    {
+        DiscountAmount = discount;
+    }
+
+    public override decimal CalculateTotal()
+    {
+        // We have to remember to subtract the discount from the inherited tax calculation
+        return base.CalculateTotal() - DiscountAmount; 
+    }
+}
+
+public class Program
+{
+    public static void Main()
+    {
+        var order = new InternationalDiscountedOrder(100m, 20m, 10m);
+        Console.WriteLine($"Total: ${order.CalculateTotal()}"); // 110
+        Console.WriteLine($"Label: {order.GetShippingLabel()}");
     }
 }
 ```
 
-### Build and Run
+**Run Command:** `dotnet run`
+
+---
+
+## 2. Go Implementation: Struct Embedding and Interfaces
+
+Go solves the combinatorial explosion by using independent interfaces and composing data structures. We separate the concept of "Data" from "Calculation Policies".
+
+**Project Setup:**
 ```bash
-dotnet run
+go mod init ecommerce
 ```
 
-## Go Implementation: Composition via Embedding and Interfaces
-
-Go eschews taxonomies. We define behaviors as interfaces and compose them into our `Order` struct.
-
-### Project Setup
-```bash
-mkdir GoECommerce && cd GoECommerce
-go mod init goecommerce
-```
-
-### Code (`main.go`)
+**Code (`main.go`)**
 ```go
 package main
 
 import "fmt"
 
-// 1. Define behaviors as interfaces
-type DiscountPolicy interface {
-    Apply(total float64) float64
+// 1. Define distinct behaviors using Interfaces
+type PricingPolicy interface {
+	CalculateTotal(basePrice float64) float64
 }
 
-type ShippingProvider interface {
-    Calculate() float64
+type ShippingPolicy interface {
+	GetLabel() string
 }
 
-// 2. Implement concrete behaviors (Strategies)
-type NoDiscount struct{}
-func (n NoDiscount) Apply(total float64) float64 { return total }
+// 2. Implement independent calculation structs
+type FlatDiscount struct {
+	Amount float64
+}
 
-type VipDiscount struct{}
-func (v VipDiscount) Apply(total float64) float64 { return total * 0.9 }
+func (d FlatDiscount) CalculateTotal(base float64) float64 {
+	return base - d.Amount
+}
 
-type StandardShipping struct{}
-func (s StandardShipping) Calculate() float64 { return 10.0 }
+type InternationalTax struct {
+	TaxRate float64
+}
 
-type InternationalShipping struct{}
-func (i InternationalShipping) Calculate() float64 { return 50.0 }
+func (t InternationalTax) CalculateTotal(base float64) float64 {
+	return base + (base * t.TaxRate)
+}
 
-// 3. Compose them into the Order
+// 3. Compose the Order struct
 type Order struct {
-    CustomerName string
-    TotalAmount  float64
-    
-    // Has-A relationships. We inject dependencies instead of inheriting.
-    DiscountPolicy   DiscountPolicy
-    ShippingProvider ShippingProvider
+	BasePrice      float64
+	// Interfaces allow us to swap policies at runtime without inheritance!
+	PricingPolicy  PricingPolicy 
+	ShippingPolicy ShippingPolicy
 }
 
-// Process coordinates the composed behaviors.
-func (o *Order) Process() {
-    o.TotalAmount = o.DiscountPolicy.Apply(o.TotalAmount)
-    shipping := o.ShippingProvider.Calculate()
-    fmt.Printf("Order for %s processed. Total: %.2f, Shipping: %.2f\n", 
-        o.CustomerName, o.TotalAmount, shipping)
+func (o Order) GetFinalTotal() float64 {
+	if o.PricingPolicy != nil {
+		return o.PricingPolicy.CalculateTotal(o.BasePrice)
+	}
+	return o.BasePrice
 }
 
 func main() {
-    // We dynamically assemble the exact order profile we want.
-    // No combinatorial explosion of classes!
-    order := Order{
-        CustomerName:     "Alice",
-        TotalAmount:      100.0,
-        DiscountPolicy:   VipDiscount{},
-        ShippingProvider: InternationalShipping{},
-    }
-    order.Process()
+	// We construct our order by COMPOSING policies, not instantiating a subclass.
+	discount := FlatDiscount{Amount: 10.0}
+	
+	order := Order{
+		BasePrice:     100.0,
+		PricingPolicy: discount,
+	}
+
+	fmt.Printf("Total: $%.2f\n", order.GetFinalTotal()) // 90.00
 }
 ```
 
-### Build and Run
-```bash
-go run main.go
+**Run Command:** `go run main.go`
+
+---
+
+## 3. Rust Implementation: Traits and Newtypes
+
+Rust takes composition further. We will use the Newtype pattern to enforce type safety (preventing mixing up taxes and discounts) and Traits for behaviors.
+
+**Project Setup (`Cargo.toml`)**
+```toml
+[package]
+name = "rust_ecommerce"
+version = "0.1.0"
+edition = "2021"
 ```
 
-## Rust Implementation: Trait-based Composition
-
-Rust similarly uses traits to define behavior and composes them. We can use generics for zero-cost abstraction.
-
-### Project Setup
-```bash
-cargo new rust_ecommerce
-cd rust_ecommerce
-```
-
-### Code (`src/main.rs`)
+**Code (`src/main.rs`)**
 ```rust
-// 1. Define behaviors as Traits
-trait DiscountPolicy {
-    fn apply(&self, total: f64) -> f64;
+// 1. Newtypes for absolute Type Safety (Zero-cost abstraction)
+// In C#, decimal is passed around everywhere. 
+// Here, a USD is distinct from a TaxRate.
+#[derive(Debug, Clone, Copy)]
+struct Usd(f64);
+
+#[derive(Debug, Clone, Copy)]
+struct TaxRate(f64);
+
+// 2. Traits define behavior
+trait PricingPolicy {
+    fn apply(&self, base_price: Usd) -> Usd;
 }
 
-trait ShippingProvider {
-    fn calculate(&self) -> f64;
+// 3. Independent Implementations
+struct FlatDiscount {
+    amount: Usd,
 }
 
-// 2. Implement concrete behaviors
-struct VipDiscount;
-impl DiscountPolicy for VipDiscount {
-    fn apply(&self, total: f64) -> f64 {
-        total * 0.9
+impl PricingPolicy for FlatDiscount {
+    fn apply(&self, base_price: Usd) -> Usd {
+        // We unpack the newtype to do math, then repack it.
+        Usd(base_price.0 - self.amount.0)
     }
 }
 
-struct InternationalShipping;
-impl ShippingProvider for InternationalShipping {
-    fn calculate(&self) -> f64 {
-        50.0
+struct InternationalTax {
+    rate: TaxRate,
+}
+
+impl PricingPolicy for InternationalTax {
+    fn apply(&self, base_price: Usd) -> Usd {
+        Usd(base_price.0 + (base_price.0 * self.rate.0))
     }
 }
 
-// 3. Compose using Generics (Static Dispatch)
-// We parameterize Order over the policies. This compiles down to highly optimized,
-// monomorphized code with no vtable overhead.
-struct Order<D: DiscountPolicy, S: ShippingProvider> {
-    customer_name: String,
-    total_amount: f64,
-    discount_policy: D,
-    shipping_provider: S,
+// 4. Combined Policy using Composition (No inheritance)
+// We can compose behaviors dynamically.
+struct CombinedPricing {
+    policies: Vec<Box<dyn PricingPolicy>>,
 }
 
-impl<D: DiscountPolicy, S: ShippingProvider> Order<D, S> {
-    fn process(&mut self) {
-        self.total_amount = self.discount_policy.apply(self.total_amount);
-        let shipping = self.shipping_provider.calculate();
-        println!(
-            "Order for {} processed. Total: {:.2}, Shipping: {:.2}",
-            self.customer_name, self.total_amount, shipping
-        );
+impl PricingPolicy for CombinedPricing {
+    fn apply(&self, base_price: Usd) -> Usd {
+        let mut total = base_price;
+        for policy in &self.policies {
+            total = policy.apply(total);
+        }
+        total
+    }
+}
+
+// 5. The Order contains state and a reference to behavior
+struct Order {
+    base_price: Usd,
+    // Box<dyn Trait> is Rust's version of an interface reference (Dynamic Dispatch via Vtable)
+    pricing_policy: Box<dyn PricingPolicy>,
+}
+
+impl Order {
+    fn get_total(&self) -> Usd {
+        self.pricing_policy.apply(self.base_price)
     }
 }
 
 fn main() {
-    // Assemble the components
-    let mut order = Order {
-        customer_name: String::from("Alice"),
-        total_amount: 100.0,
-        discount_policy: VipDiscount,
-        shipping_provider: InternationalShipping,
-    };
+    let base = Usd(100.0);
     
-    order.process();
+    let discount = Box::new(FlatDiscount { amount: Usd(10.0) });
+    let tax = Box::new(InternationalTax { rate: TaxRate(0.20) });
+    
+    let combo = Box::new(CombinedPricing {
+        policies: vec![discount, tax],
+    });
+
+    let order = Order {
+        base_price: base,
+        pricing_policy: combo,
+    };
+
+    println!("Total: ${:.2}", order.get_total().0); // (100 - 10) * 1.20 = 108.0
 }
 ```
 
-### Build and Run
-```bash
-cargo run
-```
+**Run Command:** `cargo run`
 
-## Critical Observations for C# Developers
-1. **Combinatorial Explosion Avoided**: In C#, supporting every combination of (VIP vs Standard) x (International vs Domestic) x (Holiday vs Normal) requires an exponentially growing class hierarchy or messy boolean flags (`isVip`, `isHoliday`). Go and Rust solve this via the Strategy Pattern, plugging in modular behaviors natively.
-2. **State Injection vs Protected Mutation**: In C#, `VipOrder` mutates `TotalAmount` directly via the `protected` modifier. This breaks encapsulation. In Go/Rust, the `VipDiscount` receives the total and returns a new total. It does not have access to the `Order` state, strictly enforcing encapsulation boundaries.
-3. **Rust Generics & Zero-Cost Abstractions**: The Rust approach uses generics (`<D, S>`). At compile time, Rust generates a specific `Order` struct specifically tailored to `VipDiscount` and `InternationalShipping`. This eliminates vtable lookups entirely, resulting in C-level performance while maintaining high-level modularity.
+### Critical Observations for C# Developers
+
+1.  **Combinatorial Explosion is Eliminated:** In C#, supporting (Discount + Tax) required a new class `InternationalDiscountedOrder`. In Go and Rust, we simply injected an array/slice of policies. 
+2.  **No `base` Keyword:** Notice that in Go and Rust, there is no call to `base.CalculateTotal()`. The implementations do not rely on hidden state inherited from a parent. They only rely on explicit arguments passed to them.
+3.  **Rust Newtypes:** `Usd` and `TaxRate` prevent a developer from accidentally passing a percentage where a currency amount was expected. C# could do this with `readonly struct`, but it carries minor serialization/boxing friction that Rust eliminates at compile-time.
+4.  **`Box<dyn Trait>` vs Go Interfaces:** In Go, any struct matching the signature implicitly satisfies the interface. In Rust, we explicitly `impl PricingPolicy for FlatDiscount`. Furthermore, because `Order` doesn't know the exact size of the policy struct at compile time, we must wrap it in a `Box` to place it on the heap and store a pointer to its vtable (`dyn Trait`).

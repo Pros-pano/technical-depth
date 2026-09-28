@@ -1,172 +1,254 @@
-# Week 08: Hands-on Lab - Resilient Chained API Client
+# Week 08 Hands-On Lab: Chained Financial Transaction Pipeline
 
-## Day 1-2: Objective
-You will build a resilient API client that makes a chained sequence of HTTP calls:
-1. `GET /users/{username}` to resolve a username to a user ID.
-2. `GET /orders?user_id={id}` to get a list of the user's orders.
-3. `GET /orders/{order_id}/details` to get the specifics of their most recent order.
+## Scenario
 
-Any step can fail: network errors (DNS, timeout), HTTP errors (404 Not Found, 401 Unauthorized), or malformed JSON payloads. The final error emitted to the CLI must carry the *full context chain* so operations teams know exactly what step failed and why.
+You are building the core processing engine for a financial payment gateway. The pipeline executes a strict sequence of operations to process a transaction:
+1. `FetchAccount`: Retrieves account details from the database.
+2. `ValidateBalance`: Ensures the account has sufficient funds.
+3. `ReserveFunds`: Places a temporary hold on the funds.
+4. `ExecuteTransfer`: Commits the transaction to the ledger.
+
+If *any* step fails, the entire pipeline must abort. Furthermore, the final error reported to the system must include the **exact step that failed**, the **Account ID**, the **Transaction ID**, and the **Root Cause Error** (e.g., a network timeout from the database).
+
+In C#, a developer might lazily throw exceptions at each step and let a top-level `catch` block handle it. In this lab, we will build rigid, fully-typed error chains in Go and Rust that guarantee no information is lost and no unexpected panics occur.
 
 ---
 
-## Day 3: Go Reference Implementation
+## Days 1-2: The Go Implementation (Reference)
 
-In Go, we use `fmt.Errorf` with the `%w` verb to chain context explicitly at every step.
+Examine the Go implementation. Note how we define a structured error type to capture the pipeline context, and how we use `fmt.Errorf` to build the chain.
+
+### `pipeline.go`
 
 ```go
 package main
 
 import (
-    "encoding/json"
-    "fmt"
-    "net/http"
+	"errors"
+	"fmt"
+	"time"
 )
 
-type User struct { ID int `json:"id"` }
-type Order struct { ID int `json:"id"` }
-type OrderDetails struct { Item string `json:"item"` }
+// --- Domain Models ---
 
-// Simulated HTTP GET wrapper
-func httpGet(url string, dest interface{}) error {
-    resp, err := http.Get(url)
-    if err != nil {
-        return fmt.Errorf("network request failed: %w", err)
-    }
-    defer resp.Body.Close()
-    
-    if resp.StatusCode == 404 {
-        return fmt.Errorf("resource not found (404)")
-    } else if resp.StatusCode != 200 {
-        return fmt.Errorf("unexpected status code: %d", resp.StatusCode)
-    }
-    
-    if err := json.NewDecoder(resp.Body).Decode(dest); err != nil {
-        return fmt.Errorf("failed to decode JSON response: %w", err)
-    }
-    return nil
+type Account struct {
+	ID      string
+	Balance float64
 }
 
-func FetchUserOrderDetails(username string) (*OrderDetails, error) {
-    // 1. Get User
-    var user User
-    if err := httpGet(fmt.Sprintf("http://api.mock/users/%s", username), &user); err != nil {
-        return nil, fmt.Errorf("failed to fetch user '%s': %w", username, err)
-    }
+type Transaction struct {
+	TxID   string
+	Amount float64
+}
 
-    // 2. Get Orders
-    var orders []Order
-    if err := httpGet(fmt.Sprintf("http://api.mock/orders?user_id=%d", user.ID), &orders); err != nil {
-        return nil, fmt.Errorf("failed to fetch orders for user %d: %w", user.ID, err)
-    }
-    if len(orders) == 0 {
-        return nil, fmt.Errorf("user %d has no orders", user.ID) // Custom business error
-    }
+// --- Error Architecture ---
 
-    // 3. Get Details
-    var details OrderDetails
-    recentOrderID := orders[0].ID
-    if err := httpGet(fmt.Sprintf("http://api.mock/orders/%d/details", recentOrderID), &details); err != nil {
-        return nil, fmt.Errorf("failed to fetch details for order %d: %w", recentOrderID, err)
-    }
+// PipelineError captures rich context about where and why a pipeline failed.
+type PipelineError struct {
+	Step      string
+	AccountID string
+	TxID      string
+	Err       error // The root cause
+}
 
-    return &details, nil
+// Implement the error interface
+func (pe *PipelineError) Error() string {
+	return fmt.Sprintf("pipeline failed at step [%s] for Tx %s, Account %s: %v", 
+		pe.Step, pe.TxID, pe.AccountID, pe.Err)
+}
+
+// Implement Unwrap so errors.Is and errors.As can walk down to the root cause
+func (pe *PipelineError) Unwrap() error {
+	return pe.Err
+}
+
+// Sentinel root causes
+var (
+	ErrAccountNotFound  = errors.New("account not found in database")
+	ErrInsufficientFund = errors.New("insufficient funds")
+	ErrNetworkTimeout   = errors.New("database network timeout")
+)
+
+// --- Pipeline Steps ---
+
+func FetchAccount(accountID string) (*Account, error) {
+	// Simulate a database network timeout
+	if accountID == "TIMEOUT_ACC" {
+		return nil, ErrNetworkTimeout
+	}
+	if accountID != "ACC-123" {
+		return nil, ErrAccountNotFound
+	}
+	return &Account{ID: accountID, Balance: 100.00}, nil
+}
+
+func ValidateBalance(acc *Account, tx *Transaction) error {
+	if acc.Balance < tx.Amount {
+		return ErrInsufficientFund
+	}
+	return nil
+}
+
+func ReserveFunds(acc *Account, tx *Transaction) error {
+	// Simulate success
+	return nil
+}
+
+func ExecuteTransfer(acc *Account, tx *Transaction) error {
+	// Simulate success
+	return nil
+}
+
+// --- Core Pipeline Orchestrator ---
+
+func ProcessTransaction(accountID string, tx *Transaction) error {
+	// Helper function to wrap errors with pipeline context
+	wrapErr := func(step string, err error) error {
+		if err == nil {
+			return nil
+		}
+		return &PipelineError{
+			Step:      step,
+			AccountID: accountID,
+			TxID:      tx.TxID,
+			Err:       err,
+		}
+	}
+
+	acc, err := FetchAccount(accountID)
+	if err != nil {
+		return wrapErr("FetchAccount", err)
+	}
+
+	if err := ValidateBalance(acc, tx); err != nil {
+		return wrapErr("ValidateBalance", err)
+	}
+
+	if err := ReserveFunds(acc, tx); err != nil {
+		// Imagine we might need to do some rollback here eventually
+		return wrapErr("ReserveFunds", err)
+	}
+
+	if err := ExecuteTransfer(acc, tx); err != nil {
+		return wrapErr("ExecuteTransfer", err)
+	}
+
+	return nil
+}
+
+func main() {
+	tx := &Transaction{TxID: "TX-999", Amount: 200.00}
+	
+	// Test failure: Insufficient Funds
+	err := ProcessTransaction("ACC-123", tx)
+	if err != nil {
+		fmt.Printf("Error: %v\n", err)
+		
+		// Check for specific root cause
+		if errors.Is(err, ErrInsufficientFund) {
+			fmt.Println("Action: Prompt user to top up account.")
+		}
+	}
 }
 ```
 
 ---
 
-## Day 4: Rust Skeleton (Your Task)
-In Rust, you will use the `reqwest` crate for HTTP, and the `anyhow` crate to seamlessly add context strings without defining massive error enums for a simple CLI app.
+## Days 3-4: The Rust Lab (Skeleton)
 
-### The Skeleton Code (TODOs)
+Your task is to implement the same pipeline in Rust. 
+
+**Requirements:**
+1. Use `thiserror` to define the root cause enum (`RootError`).
+2. Define a custom struct `PipelineError` that contains the step name, IDs, and the `RootError`. 
+3. Implement `std::error::Error` for `PipelineError` manually or via `thiserror`.
+4. Use the `?` operator combined with `map_err` to elegantly transform the `RootError` from each step into a `PipelineError` with the correct context.
+
+### `src/main.rs` (Skeleton)
 
 ```rust
-// Cargo.toml
-// [dependencies]
-// reqwest = { version = "0.11", features = ["json", "blocking"] }
-// anyhow = "1.0"
-// serde = { version = "1.0", features = ["derive"] }
+use std::fmt;
+use thiserror::Error;
 
-use anyhow::{Context, Result, anyhow};
-use serde::Deserialize;
-
-#[derive(Deserialize)]
-struct User { id: u32 }
-
-#[derive(Deserialize)]
-struct Order { id: u32 }
-
-#[derive(Deserialize, Debug)]
-pub struct OrderDetails { item: String }
-
-// A helper wrapper. It returns anyhow::Result to allow easy chaining.
-fn http_get<T: for<'de> Deserialize<'de>>(url: &str) -> Result<T> {
-    let resp = reqwest::blocking::get(url)
-        .with_context(|| format!("Network request failed for URL: {}", url))?;
-        
-    let status = resp.status();
-    if status.is_client_error() || status.is_server_error() {
-        // We use the `anyhow!` macro to create an ad-hoc error
-        return Err(anyhow!("HTTP API returned error status: {}", status));
-    }
-    
-    let data = resp.json::<T>()
-        .context("Failed to deserialize JSON response payload")?;
-        
-    Ok(data)
+// --- Domain Models ---
+#[derive(Debug)]
+pub struct Account {
+    pub id: String,
+    pub balance: f64,
 }
 
-pub fn fetch_user_order_details(username: &str) -> Result<OrderDetails> {
-    let url_user = format!("http://api.mock/users/{}", username);
-    // TODO 1: Call http_get. Use .with_context() to add "Failed to lookup user '{username}'".
-    // Hint: You will hit this compiler error if you forget the `?`: 
-    // "expected struct `OrderDetails`, found enum `Result`"
-    let user: User = unimplemented!();
+#[derive(Debug)]
+pub struct Transaction {
+    pub tx_id: String,
+    pub amount: f64,
+}
 
-    let url_orders = format!("http://api.mock/orders?user_id={}", user.id);
-    // TODO 2: Call http_get for the orders array.
-    let orders: Vec<Order> = unimplemented!();
+// --- Error Architecture (TODO) ---
 
-    // TODO 3: Handle the empty case. 
-    // If orders.is_empty(), return an Err using the `anyhow!("User {} has no orders", user.id)` macro.
+// TODO 1: Define `RootError` enum using `#[derive(Error, Debug)]`
+// It should have variants: AccountNotFound, InsufficientFunds, NetworkTimeout.
+
+// TODO 2: Define `PipelineError` struct.
+// Fields: step (String), account_id (String), tx_id (String), source (RootError).
+// Implement Display and std::error::Error for PipelineError.
+
+// --- Pipeline Steps ---
+
+// TODO 3: Implement FetchAccount
+// fn fetch_account(account_id: &str) -> Result<Account, RootError> { ... }
+
+// TODO 4: Implement ValidateBalance
+// fn validate_balance(acc: &Account, tx: &Transaction) -> Result<(), RootError> { ... }
+
+// TODO 5: Implement ReserveFunds
+// fn reserve_funds(acc: &Account, tx: &Transaction) -> Result<(), RootError> { ... }
+
+// TODO 6: Implement ExecuteTransfer
+// fn execute_transfer(acc: &Account, tx: &Transaction) -> Result<(), RootError> { ... }
+
+// --- Core Pipeline Orchestrator ---
+
+pub fn process_transaction(account_id: &str, tx: &Transaction) -> Result<(), /* TODO: Return Type */> {
+    // TODO 7: Chain the operations together.
+    // HINT: Use `.map_err(|e| PipelineError { ... })?` at each step to attach context.
     
-    let url_details = format!("http://api.mock/orders/{}/details", orders[0].id);
-    // TODO 4: Call http_get for the OrderDetails.
-    let details: OrderDetails = unimplemented!();
-
-    Ok(details)
+    unimplemented!("Implement the pipeline orchestration");
 }
 
 fn main() {
-    match fetch_user_order_details("alice") {
-        Ok(details) => println!("Success: {:?}", details),
-        Err(e) => {
-            // This prints the error and the FULL chain of Caused by:
-            eprintln!("Error: {:?}", e);
-        }
-    }
+    let tx = Transaction { tx_id: "TX-999".to_string(), amount: 200.00 };
+    
+    // Test the implementation
+    // match process_transaction("ACC-123", &tx) { ... }
 }
 ```
 
-### Errors You Will Encounter & How to Resolve Them
-1. **`error[E0277]: the trait From<reqwest::Error> is not implemented`**: You will hit this if you forget to use `.context()` or `anyhow::Result` and try to mix raw library errors. `anyhow` acts as a sponge that can swallow any error implementing `std::error::Error`.
-2. **"cannot use `?` in a closure"**: If you use `.map(|user| ...?)`, the compiler will complain because `?` attempts to return early from the *closure*, not the parent function. The fix is to let the `Result` return from the closure and apply `?` outside it, or use a `for` loop.
-
 ---
 
-## Friday Mob Review
+## Friday: Mob Review & Sign-Off
 
-### The "No Unwrap" Rule
-Review the completed code. **There must be absolutely zero `.unwrap()` or `.expect()` calls in the entire `fetch_user_order_details` function.** Every possible failure must be safely propagated using `?`.
+Gather with your team and review the Rust implementations. 
 
-### Discussion Questions
-1. Compare the error output. In C#, you get a raw stack trace. In Rust with `anyhow`, what did the output look like? (Hint: it prints exactly the contextual causal chain you built).
-2. How does `Result` force you to handle the case where `orders` is an empty list, compared to C# where a dev might lazily write `orders.First()` and cause an unhandled `InvalidOperationException` at runtime? 
-3. If this code was a library intended for millions of downloads (like a driver), why would we switch from `anyhow` to `thiserror`?
+### Discussion Questions (Have answers prepared)
 
-## Sign-off Checklist
-- [ ] Are all `panic!`, `unwrap()`, and `expect()` calls completely eliminated?
-- [ ] Did you use `anyhow::Context` to attach semantic meaning to the raw `reqwest` errors?
-- [ ] Does the top-level error print the full chain of failures via `{:?}`?
-- [ ] Did you successfully use the `?` operator at every failure point?
+1. **The Boilerplate Question:** Compare the C# `try/catch` approach to Rust's `.map_err().?` chaining. Which requires more typing? Which provides higher confidence that an error isn't accidentally swallowed?
+2. **Memory Allocation:** When `FetchAccount` fails in C#, a heap allocation occurs for the `Exception`. Where does the memory for `RootError` and `PipelineError` live in the Rust implementation? (Answer: On the stack, they are just enums/structs returned as values).
+3. **Control Flow:** How does the compiler know to exit `process_transaction` early when the `?` operator is invoked? What is the assembly equivalent of `?`?
+4. **Pattern Matching vs Catch:** In `main()`, you used `match` to inspect the error. How does the Rust compiler ensure you handled all variants of `RootError` if you decided to match on `e.source`? Can C# guarantee you caught all exception types?
+5. **The `anyhow` crate:** If this pipeline was the absolute top-level of an CLI application and no one else was going to import it as a library, how could we have rewritten this using `anyhow::Context` instead of a custom `PipelineError` struct?
+6. **Go's `Unwrap` vs Rust's `source()`:** Both languages provide a mechanism to traverse an error chain to find a root cause. Compare Go's `errors.Is(err, target)` with Rust's `std::error::Error::source()`. 
+7. **Zero Cost Abstraction:** Prove to the room that the `Result` type in Rust does not incur runtime overhead on the happy path.
+
+### Sign-off Checklist
+
+Each team member must verbally answer "Yes" to the following:
+- [ ] I can explain why returning `Result` is faster than throwing an exception.
+- [ ] I can write a function that returns a `Result` and use the `?` operator.
+- [ ] I understand the difference between `thiserror` (libraries/domain) and `anyhow` (applications).
+- [ ] I know how to wrap an error with additional context without losing the original stack/root cause.
+- [ ] I can explain why using exceptions for normal domain validation flow is an antipattern.
+
+### Stretch Goals for Fast Learners
+
+1. **Retry Logic:** Modify the orchestrator (in either Go or Rust) so that if the step fails specifically with `ErrNetworkTimeout` / `RootError::NetworkTimeout`, it retries exactly 3 times with exponential backoff before returning the `PipelineError`. 
+2. **Boxed Errors:** In Rust, attempt to change the return type of the steps from `Result<T, RootError>` to `Result<T, Box<dyn std::error::Error>>`. Observe how this impacts your ability to pattern match the root cause in `main()`. Why is strongly typing the error preferred in core domain logic?
