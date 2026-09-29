@@ -21,6 +21,19 @@ This repository directory contains the architectural blueprints, technical toolc
    - **Go:** Ultra-lightweight network ingress, CQRS command ingestion, CDC consumers, and Kubernetes operators.
    - **C# .NET 8/9:** Complex domain business logic, workflow state machines, and CQRS read projections.
    - **Rust:** Ultra-low-latency query parsing, complex CTE generation, zero-copy Arrow serialization, and math-heavy graph algorithms.
+5. **Ontology-Driven UI Operating System (Interlinker UI / Ix-Platform):**
+   - **Native Web Components (Lit 3.x):** W3C standard Custom Elements with Shadow DOM style isolation, native performance, and strict framework independence.
+   - **Micro-Kernel Engine (`Interlinker.Engine`):** Pluggable IoC `ServiceRegistry` and dynamic micro-frontend module loading via `ComponentRegistry`.
+   - **Horizontal Blade Navigation (`ix-meta-blade` + `ix-meta-flow-shell`):** Spatial multi-blade cascading workspaces preserving operator context.
+   - **GSOAE 4-Quadrant Execution:** Dynamic form/view synthesis via `SemanticMapper` (26+ semantic controls), client-side CQRS event sourcing, and MassTransit-compatible UUIDv7 sequential GUIDs.
+   - **Autonomous UI Fleet:** AI Agent 06 (`agent-06-ui-lit-developer`) synthesizes Lit components directly from MCP ontology endpoints with bilateral E2E self-healing.
+
+---
+
+## Architecture Documents Index
+
+- [README.md](file:///home/sundarjadhav/ProsPano-Development/Hub/technical-depth/00%20Arch-roadmap-tools/README.md) — Master Architecture Roadmap, System Vision, Tooling Matrix & Multi-Model PostgreSQL Blueprints.
+- [01_UI_ECOSYSTEM_PHILOSOPHY_AND_ARCHITECTURE.md](file:///home/sundarjadhav/ProsPano-Development/Hub/technical-depth/00%20Arch-roadmap-tools/01_UI_ECOSYSTEM_PHILOSOPHY_AND_ARCHITECTURE.md) — Deep Specification: Interlinker UI / Ix-Platform, Micro-Kernel, Web Components, Blade Architecture, and GSOAE 4-Quadrant Synthesis.
 
 ---
 
@@ -63,7 +76,7 @@ flowchart TD
             BE_Go["Go: Command API & CDC Gateway"]
             BE_DotNet["C# .NET: Domain Engine & Projections"]
             BE_Rust["Rust: Query Engine & Graph Math"]
-            UI["Frontend: React/Next.js (OKF Forms)"]
+            UI["Interlinker UI: Lit Web Components (Micro-Kernel & Blade Architecture)"]
         end
 
         GitOps["Auto GitSecOps (ArgoCD + Semgrep + Trivy + Cosign)"]
@@ -114,11 +127,15 @@ flowchart TD
 | **Polyglot Backends** | **Go (Ingress & CDC)** | **Chi** + **pgx/v5** + **sqlc** | High-concurrency command endpoints, CDC event processing, and streaming. |
 | | **C# .NET (Domain)** | **ASP.NET Core 8/9** + **EF Core** / **Dapper** | Complex domain orchestration, CQRS read model projections, and enterprise APIs. |
 | | **Rust (Engine)** | **Axum** + **Tonic (gRPC)** + **SQLx** | High-performance graph queries, controlled CTE execution, and zero-copy math. |
-| | **Contracts** | **Buf CLI** + **Protobuf 3** + **Apache Arrow** | Cross-language type safety and zero-copy tabular memory transfers. |
-| **Frontend** | **Web Framework** | **React 19 / Next.js (TypeScript)** | SSR enterprise portal with strict typing. |
-| | **Dynamic Forms** | **React JSON Schema Form (RJSF)** / **Zod** | Automatically renders and validates UI forms derived directly from OKF schemas. |
-| | **RPC Client** | **Connect-RPC (Buf)** | Type-safe gRPC-compatible browser-to-backend communication. |
-| **GitSecOps** | **GitOps Delivery** | **ArgoCD** | Declarative synchronization from Git to the hybrid K8s cluster. |
+| **Frontend Platform** | **Component Framework** | **Lit 3.x (Web Components / Custom Elements)** | W3C custom elements with Shadow DOM; zero virtual DOM overhead, native browser speed, framework-agnostic. |
+| | **Micro-Kernel Engine** | **Interlinker.Engine (`bootstrap.ts`)** | Dynamic module loader, IoC `ServiceRegistry`, and event-driven runtime lifecycle. |
+| | **Component SDK** | **Interlinker.SDK (`IxBaseElement`, `@interlinker/sdk`)** | Base element foundation with `@consume` context injection, XState actors, and command bus. |
+| | **Blade Navigation** | **`ix-meta-blade` + `ix-meta-flow-shell`** | Multi-tenant horizontal sliding blade architecture preserving deep spatial workflow context. |
+| | **Dynamic Semantic UI** | **`SemanticMapper` + `UiControlDirective`** | Dynamic form/view synthesis mapping OKF `MetaEntity` attributes to 26+ native semantic controls. |
+| | **High-Perf Grid** | **`ix-meta-grid`** | High-density enterprise virtualized data grid with type renderers, action bars, and inline editing. |
+| | **Schema & Flow Builder**| **`ix-meta-builder`** | Visual drag-and-drop ontology entity and workflow transition builder. |
+| | **Client CQRS & State** | **Redux Toolkit (`readModelStore`, `eventStore`)** | Client-side CQRS event sourcing with MassTransit-compatible UUIDv7 sequential GUIDs. |
+| | **Autonomous Agent UI** | **Agent 06 (UI Lit Developer OpenClaw)** | Autonomous synthesis of Lit Web Components directly from MCP ontology schemas with bilateral E2E repair. |
 | | **Policy-as-Code** | **Kyverno** / **OPA Gatekeeper** | Validates that all workloads and DDL migrations adhere to OKF governance. |
 | | **Code Scanning** | **Semgrep** | Custom AST rules ensuring backend code validates OKF constraints before writes. |
 | | **Container Security**| **Trivy** + **Cosign** | Vulnerability scanning, SBOM generation, and cryptographic image signing. |
@@ -323,9 +340,13 @@ spec:
    - Deploy NVIDIA GPU and Network Operators.
    - Spin up vLLM with Outlines guided decoding bound to OKF grammars.
    - Configure Spark RAPIDS operator for GPU-accelerated batch vectorization.
-4. **Phase 4: Polyglot Backend & Frontend Deployment**
+4. **Phase 4: Polyglot Backend & Interlinker UI Platform Deployment**
    - Deploy Go CQRS command gateway, C# .NET projection workers, and Rust query services.
-   - Connect Next.js/React frontend with dynamic OKF-driven forms.
+   - Deploy Interlinker UI micro-kernel engine (`Interlinker.Engine`), registering core services (`ServiceRegistry`).
+   - Mount `ix-meta-flow-shell` and `ix-meta-bladecontainer` for horizontal cascading blade navigation.
+   - Activate dynamic `SemanticMapper` rendering 26+ native Lit controls from OKF Quadrant I `MetaEntity` schemas.
+   - Connect frontend Redux `eventStore` and `readModelStore` with client-side UUIDv7 sequential GUID generation.
+   - Configure Agent 06 (UI Lit Developer) in CI to autonomously generate Lit Web Components from MCP ontology endpoints.
 5. **Phase 5: Auto GitSecOps & Production Hardening**
    - Configure ArgoCD GitOps pipelines.
    - Deploy Kyverno policies and Semgrep CI scanners to enforce OKF compliance.
